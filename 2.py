@@ -1,23 +1,23 @@
-import os
-import streamlit as st
-import fitz  # PyMuPDF
-import openai
-import markdown2
-from markupsafe import Markup
-import pandas as pd
-import re
-import httpx
 import asyncio
-import io
-from io import StringIO
-import xml.etree.ElementTree as ET
-from word_extractor import WordExtractor
-from docx import Document
-import xmind
-import tempfile
 import base64
+import json
+import os
+import re
+import tempfile
 import uuid
+import xml.etree.ElementTree as ET
+from io import StringIO
+
+import httpx
+import markdown2
+import pandas as pd
+import requests
+import streamlit as st
 import streamlit.components.v1 as components
+import xmind
+from markupsafe import Markup
+
+from word_extractor import WordExtractor
 
 # 初始化会话状态
 if 'requirement_info' not in st.session_state:
@@ -197,6 +197,33 @@ def df_to_xmind(df, save_dir):
 
     return full_path
 
+
+async def rag(requirement_info):
+    # API URL
+    api_url = "http://10.12.3.94/v1/chat-messages"
+    # API Key
+    api_key = "app-L1cDMG3wA4EYG5B13Qezu2CY"
+
+    # Request headers
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json',
+    }
+
+    # Request payload
+    data = {
+        "inputs": {},
+        "query": f"{requirement_info}",
+        "response_mode": "blocking",
+        "conversation_id": "",
+        "user": "abc-123"
+    }
+    # 发送 POST request
+    response = requests.post(api_url, headers=headers, data=json.dumps(data))
+    response_json = response.json()
+    answer = response_json.get('answer', 'No answer found')
+    return answer
+
 # Call external API and generate test cases
 async def qwen_predict(requirement_info, prompts_case, Recall_Content, complement, module):
     json1 = {
@@ -269,32 +296,6 @@ async def qwen_predict(requirement_info, prompts_case, Recall_Content, complemen
         response2.raise_for_status()
         return formatting(response2.json()["choices"][0]["message"]["content"])
 
-async def rag(api,requirement_info):
-    json = {
-        "max_tokens": 15000,
-        "temperature": 0.5,
-        "top_p": 0.7,
-        "top_k": 50,
-        "repetition_penalty": 1,
-        "stop": [
-            "<|im_end|>",
-            "<|im_start|>"
-        ],
-        "messages": [
-            {
-                "content": f"{requirement_info}：",
-                "role": "user"
-            }
-        ],
-        "repetitive_penalty": 1
-    }
-    headers = {'Authorization': 'Bearer c9bd37061c2a92ea4d524aab6fd94d36aa108701f95811d3d2bbb8e41d0ff8d9'}
-    async with httpx.AsyncClient() as client:
-        response = await client.post(api, json=json, headers=headers,
-                                     timeout=300)
-        response.raise_for_status()
-        requirement_info = response.json()["choices"][0]["message"]["content"].strip()
-        return requirement_info
 
 # 提取文档中的内容
 def extract_text_table_img(file):
@@ -304,8 +305,6 @@ def extract_text_table_img(file):
     img = extracted_content["image_content"]
     table = extracted_content["table_content"]
     return text, img, table
-
-
 
 
 # 使用大模型总结需求信息
@@ -341,6 +340,10 @@ async def qwen_extract_requirements(text, table, img):
         requirement_info = response.json()["choices"][0]["message"]["content"].strip()
         return requirement_info
 
+#RAG召回调用
+async def run_rag():
+    return await rag(requirement_info)
+
 def get_file_base64(bin_file):
     with open(bin_file, 'rb') as f:
         data = f.read()
@@ -353,23 +356,31 @@ if uploaded_file is not None:
         # TODO：优化这部分的代码
         # 如果直接传入uploaded_file.name 出现错误：不是有效的文件或网址
         text_info, table_info, img_info = extract_text_table_img("D:\TestCases\航空云监控管理_需求规格说明书20240223.docx")
-        requirement_info = asyncio.run(qwen_extract_requirements(text_info, table_info, img_info))
+
+        async def run_extraction():
+            return await qwen_extract_requirements(text_info, table_info, img_info)
+        requirement_info = asyncio.run(run_extraction())
         st.session_state.requirement_info = requirement_info
         st.write(requirement_info)
         st.write("需求信息提取完成！~~~~~~~~~~~~~~~~~~~~~~~~~~")
         st.session_state.requirement_info = requirement_info  # 更新需求说明
+        rag_info = asyncio.run(run_rag())
+        st.session_state.rag_info = rag_info
     except Exception as e:
         st.error(f"上传文件时出现错误：{e}")
 
 
-# TODO:部署RAG应用
-api_key = st.text_input("请输入您的API key")
-if api_key:
-    st.write(f"你的API key是: {api_key}")
 
-prompts_case = st.text_input("请输入您的prompt以帮助生成更符合要求的测试用例")
+# TODO:部署RAG应用
+# api_key = st.text_input("请输入您的API key")
+# if api_key:
+#     st.write(f"你的API key是: {api_key}")
+
+# prompts_case = st.text_input("请输入您的prompt以帮助生成更符合要求的测试用例")
 
 additional_notes = st.text_input("请输入补充说明：（可选）")
+
+
 
 st.text("测试模块")
 col1, col2, col3, col4, col5 = st.columns(5)
@@ -406,16 +417,13 @@ if st.button("生成测试用例"):
         with st.spinner("正在生成测试用例..."):
             try:
                 async def run_async():
-                    return await qwen_predict(st.session_state.requirement_info, st.session_state.prompts_case, '', st.session_state.additional_notes,
+                    return await qwen_predict(st.session_state.requirement_info, st.session_state.prompts_case, st.session_state.rag_info, st.session_state.additional_notes,
                                               st.session_state.module)
                 result_df = asyncio.run(run_async())
-
                 if result_df.empty:
                     st.write("生成结果为空，请检查输入和API调用。")
                 else:
                     st.session_state.result_df = result_df
-                    # result_df.to_csv("result_df.csv", index=False,encoding='utf-8')  # 保存为CSV文件
-                    # st.write("生成用例完成！结果已保存到根目录下的result_df.csv文件中。")
                     st.write("测试用例已生成")
             except Exception as e:
                 st.error(f"生成测试用例时出错: {e}")
@@ -430,23 +438,6 @@ if not st.session_state.result_df.empty:
         st.session_state.result_df = edited_df
         st.success("修改已保存！")
 
-    # col1, col2 = st.columns(2)
-    # with col1:
-    #     markdown_data = df_to_markdown(st.session_state.result_df)
-    #     st.download_button(
-    #         label="下载 Markdown 格式",
-    #         data=markdown_data,
-    #         file_name="test_cases.md",
-    #         mime="text/markdown"
-    #     )
-    # with col2:
-    #     freemind_data = df_to_freemind(st.session_state.result_df)
-    #     st.download_button(
-    #         label="下载 FreeMind 格式",
-    #         data=freemind_data,
-    #         file_name="test_cases.mm",
-    #         mime="application/xml"
-    #     )
 
     with tempfile.TemporaryDirectory() as save_dir:
         # 生成XMind文件
