@@ -1,6 +1,6 @@
 import os
 class fileExport:
-    def file_export(self, base64, path):
+    def file_export(self, base64, path, type1):
         content = f"""
                         <style>
                             .download-button {{
@@ -38,7 +38,7 @@ class fileExport:
                                           <div data-testid="stMarkdownContainer" class="st-emotion-cache-187vdiz e1nzilvr4">
                                             <p>
                                               <font style="vertical-align: inherit;">
-                                                <font style="vertical-align: inherit;">下载 Freemind 格式文件</font>
+                                                <font style="vertical-align: inherit;">{type1}</font>
                                               </font>
                                             </p>
                                           </div>
