@@ -38,7 +38,7 @@ class fileExport:
                                           <div data-testid="stMarkdownContainer" class="st-emotion-cache-187vdiz e1nzilvr4">
                                             <p>
                                               <font style="vertical-align: inherit;">
-                                                <font style="vertical-align: inherit;">{type1}</font>
+                                                <font style="vertical-align: inherit;">导出{type1}格式</font>
                                               </font>
                                             </p>
                                           </div>
