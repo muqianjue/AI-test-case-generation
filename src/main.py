@@ -1,7 +1,6 @@
 import asyncio
 import os
 import tempfile
-
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -19,17 +18,23 @@ st.set_page_config(layout='wide')
 
 # 初始化会话状态
 if 'requirement_info' not in st.session_state:
-    st.session_state.requirement_info = ""
-if 'prompts_case' not in st.session_state:
-    st.session_state.prompts_case = ""
-if 'additional_notes' not in st.session_state:
-    st.session_state.additional_notes = ""
-if 'api_key' not in st.session_state:
-    st.session_state.api_key = ""
-if 'module' not in st.session_state:
-    st.session_state.module = ""
+    st.session_state.requirement_info = None
+if 'rag_info' not in st.session_state:
+    st.session_state.rag_info = None
 if 'result_df' not in st.session_state:
     st.session_state.result_df = pd.DataFrame()
+if 'processed_file' not in st.session_state:
+    st.session_state.processed_file = None
+if 'initial_df' not in st.session_state:
+    st.session_state.initial_df = pd.DataFrame()
+if 'demand_edited_df' not in st.session_state:
+    st.session_state.demand_edited_df = pd.DataFrame()
+if 'selected_rows' not in st.session_state:
+    st.session_state.selected_rows = []
+if 'prev_requirement_info' not in st.session_state:
+    st.session_state.prev_requirement_info = None
+if 'test_case_input_hash' not in st.session_state:
+    st.session_state.test_case_input_hash = None
 
 # 初始化处理器
 doc_processor = DocumentProcessor()
@@ -76,54 +81,69 @@ uploaded_file = st.file_uploader("选择需求文档", type=["docx"])
 if uploaded_file is not None:
     file_details = {"FileName": uploaded_file.name, "FileType": uploaded_file.type}
     st.write(file_details)
-    try:
-        # TODO：优化这部分的代码，利用上传的文档：方法：将二进制数据写入一个新的文档，再把新的文档传递进函数中
-        # TODO:多个人一起用呢？
-        bytes_data = uploaded_file.read()
-        st.write("filename:", uploaded_file.name)
-        with open("file.docx", 'wb') as f:
-            f.write(bytes_data)
-        title, extract_content = doc_processor.extract_text_table_img('file.docx')
-        if st.button('需要提取图片信息'):
-            extract_image = True
 
-        async def run_extraction():
-            return await doc_processor.qwen_extract_requirements(title, extract_content)
+    if st.session_state.processed_file != uploaded_file.name:
+        st.session_state.processed_file = uploaded_file.name
+        try:
+            bytes_data = uploaded_file.read()
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as temp_file:
+                temp_file.write(bytes_data)
+                temp_file_path = temp_file.name
 
-        requirement_info = asyncio.run(run_extraction())
+            title, extract_content = doc_processor.extract_text_table_img(temp_file_path)
+            os.unlink(temp_file_path)  # 删除临时文件
 
-        table_data = data_formatter.formatting(requirement_info)
-        # 将表格数据转换为 DataFrame
-        df = pd.DataFrame(table_data)
 
-        # 在 Streamlit 中显示表格
-        st.subheader("生成的需求信息表格（您可根据实际需要进行选择）:")
-        edited_df = editor.paginated_data_editor(df)
-        # TODO:获取勾选的框？
-        # 显示用于选择行的多选框
-        selected_rows = st.multiselect("选择需求：", df.index, format_func=lambda x: f"{edited_df.at[x, '需求名称']}")
-        # 记录选中行的内容
+            async def run_extraction():
+                return await doc_processor.qwen_extract_requirements(title, extract_content)
+
+
+            requirement_info = asyncio.run(run_extraction())
+            table_data = data_formatter.formatting(requirement_info)
+            st.session_state.initial_df = pd.DataFrame(table_data)
+        except Exception as e:
+            st.error(f"上传文件时出现错误：{e}")
+
+    df = st.session_state.initial_df
+
+    st.subheader("生成的需求信息表格（您可根据实际需要进行选择）:")
+    edited_df = editor.paginated_data_editor(df, key_prefix='requirements')
+
+    if not st.session_state.demand_edited_df.equals(edited_df):
+        st.session_state.demand_edited_df = edited_df
+
+    if st.checkbox("显示完整数据"):
+        st.subheader("完整数据")
+        st.dataframe(
+            st.session_state.demand_edited_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={col: st.column_config.Column(width="flex") for col in
+                           st.session_state.demand_edited_df.columns}
+        )
+
+    selected_rows = st.multiselect("选择需求：", df.index,
+                                   format_func=lambda x: f"{st.session_state.demand_edited_df.at[x, '需求名称']}")
+    if st.session_state.selected_rows != selected_rows:
+        st.session_state.selected_rows = selected_rows
         selected_rows_content = df.iloc[selected_rows]
-
         st.write("选中的需求内容：")
         st.dataframe(selected_rows_content)
         selected_rows_dict = selected_rows_content.to_dict('records')
-        # print("选中的需求信息：", selected_rows_dict)
-        st.session_state.requirement_info = selected_rows_dict  # 更新需求说明
-        st.write("需求信息提取完成！~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        st.session_state.requirement_info = selected_rows_dict
 
-        #rag召回信息
-        #对选中的需求信息进行召回
+    if st.session_state.requirement_info != st.session_state.prev_requirement_info:
+        st.session_state.prev_requirement_info = st.session_state.requirement_info
+
+
         async def run_rag():
             return await rag.rag_recall(st.session_state.requirement_info)
+
+
         rag_info = asyncio.run(run_rag())
         st.session_state.rag_info = rag_info
 
-    except Exception as e:
-        st.error(f"上传文件时出现错误：{e}")
-
 additional_notes = st.text_input("请输入补充说明：（可选）")
-
 
 # 测试模块选择选项
 st.text("测试模块")
@@ -151,33 +171,38 @@ if error_test:
 if com_test:
     selected_tests.append('兼容性测试')
 
-# 输出已选选项
-# st.write('已选测试模块: ', ', '.join(selected_tests))
 st.session_state.module = selected_tests
 
 if st.button("生成测试用例"):
     if st.session_state.requirement_info and st.session_state.module:
         with st.spinner("正在生成测试用例..."):
             try:
-                async def run_async():
-                    return await test_case_generator.qwen_generate_test_cases(
-                        st.session_state.requirement_info,
-                        st.session_state.rag_info,
-                        st.session_state.additional_notes,
-                        st.session_state.module
-                    )
-                result = asyncio.run(run_async())
-                print('测试用例结果：\n', result)
-
-                result_df = data_formatter.formatting(result)
-                # print(result_df)
+                input_hash = hash((str(st.session_state.requirement_info),
+                                   str(st.session_state.rag_info),
+                                   additional_notes,
+                                   str(st.session_state.module)))
+                if st.session_state.test_case_input_hash != input_hash:
+                    st.session_state.test_case_input_hash = input_hash
 
 
-                if result_df.empty:
-                    st.write("生成结果为空，请检查输入和API调用。")
+                    async def run_async():
+                        return await test_case_generator.qwen_generate_test_cases(
+                            st.session_state.requirement_info,
+                            st.session_state.rag_info,
+                            additional_notes,
+                            st.session_state.module
+                        )
+
+
+                    result = asyncio.run(run_async())
+                    result_df = data_formatter.formatting(result)
+                    if result_df.empty:
+                        st.write("生成结果为空，请检查输入和API调用。")
+                    else:
+                        st.session_state.result_df = result_df
+                        st.write("测试用例已生成")
                 else:
-                    st.session_state.result_df = result_df
-                    st.write("测试用例已生成")
+                    st.write("使用缓存的测试用例结果")
             except Exception as e:
                 st.error(f"生成测试用例时出错: {e}")
     else:
@@ -186,34 +211,28 @@ if st.button("生成测试用例"):
 # 显示和编辑生成的测试用例
 if not st.session_state.result_df.empty:
     st.subheader("生成的测试用例表格（您可根据实际需要进行编辑）")
-    edited_df = st.data_editor(st.session_state.result_df, num_rows="dynamic",use_container_width=True)
+    st.session_state.result_edited_df = editor.paginated_data_editor(st.session_state.result_df,
+                                                                     key_prefix='test_cases')
 
-    if st.button("保存修改"):
-        st.session_state.result_df = edited_df
-        st.success("修改已保存！")
+    if st.checkbox("显示完整测试数据"):
+        st.subheader("完整测试数据")
+        st.dataframe(
+            st.session_state.result_edited_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={col: st.column_config.Column(width="flex") for col in
+                           st.session_state.result_edited_df.columns}
+        )
 
+    # 文件导出部分
     with tempfile.TemporaryDirectory() as save_dir:
-        # 生成path文件
         xmind_path = data_formatter.df_to_xmind(st.session_state.result_df, save_dir)
         freemind_path = data_formatter.df_to_freemind(st.session_state.result_df, save_dir)
         markdown_path = data_formatter.df_to_markdown(st.session_state.result_df, save_dir)
-        # 获取文件的base64编码
-        xmind_file_base64 = download_link.get_file_base64(xmind_path)
-        freemind_file_base64 = download_link.get_file_base64(freemind_path)
-        markdown_file_base64 = download_link.get_file_base64(markdown_path)
-        # 创建自定义HTML和JavaScript
-        xmind_html_content = export.file_export(xmind_file_base64, xmind_path)
-        freemind_html_content = export.file_export(freemind_file_base64, freemind_path)
-        markdown_html_content = export.file_export(markdown_file_base64, markdown_path)
-        # 使用 components.html 来渲染 HTML 和执行 JavaScript
-        # 生成xmind文件
-        components.html(xmind_html_content)
-        # 生成freemind文件
-        components.html(freemind_html_content)
-        # 生成Markdown文件
-        components.html(markdown_html_content)
 
+        for file_path, file_type in [(xmind_path, 'XMind'), (freemind_path, 'FreeMind'), (markdown_path, 'Markdown')]:
+            file_base64 = download_link.get_file_base64(file_path)
+            html_content = export.file_export(file_base64, file_path)
+            components.html(html_content, height=50)
 
-
-
-# TODO:把上传文件清理掉
+st.markdown("</div>", unsafe_allow_html=True)
