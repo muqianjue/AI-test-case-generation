@@ -109,6 +109,11 @@ if uploaded_file is not None:
         except Exception as e:
             st.error(f"上传文件时出现错误：{e}")
 
+        finally:
+        # 删除临时文件
+            if tmp_file_path and os.path.exists(tmp_file_path):
+                os.remove(tmp_file_path)
+
     df = st.session_state.initial_df
 
     st.markdown("<div class='small-header'>生成的需求信息表格（您可根据实际需要进行选择）:</div>", unsafe_allow_html=True)
@@ -140,10 +145,8 @@ if uploaded_file is not None:
     if st.session_state.requirement_info != st.session_state.prev_requirement_info:
         st.session_state.prev_requirement_info = st.session_state.requirement_info
 
-
         async def run_rag():
             return await rag.rag_recall(st.session_state.requirement_info)
-
 
         rag_info = asyncio.run(run_rag())
         st.session_state.rag_info = rag_info
