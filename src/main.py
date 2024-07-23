@@ -240,7 +240,7 @@ if not st.session_state.result_df.empty:
 
         for file_path, file_type in [(xmind_path, 'XMind'), (freemind_path, 'FreeMind'), (markdown_path, 'Markdown')]:
             file_base64 = download_link.get_file_base64(file_path)
-            html_content = export.file_export(file_base64, file_path)
+            html_content = export.file_export(file_base64, file_path , file_type)
             components.html(html_content, height=50)
 
 st.markdown("</div>", unsafe_allow_html=True)
