@@ -6,7 +6,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from data_formatter import DataFormatter
-from document_processor import DocumentProcessor
+from DocumentProcessor import DocumentExtractor
 from test_case_generator import TestCaseGenerator
 from xmind_download_link import DownloadLink
 from rag import Rag
@@ -37,7 +37,6 @@ if 'test_case_input_hash' not in st.session_state:
     st.session_state.test_case_input_hash = None
 
 # 初始化处理器
-doc_processor = DocumentProcessor()
 test_case_generator = TestCaseGenerator()
 data_formatter = DataFormatter()
 download_link = DownloadLink()
@@ -67,6 +66,9 @@ st.markdown(
         display: flex;
         justify-content: center;
     }
+    .small-header {
+        font-size: 1.25em;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -79,19 +81,22 @@ st.title("🤖 根据需求文档生成测试用例")
 uploaded_file = st.file_uploader("选择需求文档", type=["docx"])
 
 if uploaded_file is not None:
-    file_details = {"FileName": uploaded_file.name, "FileType": uploaded_file.type}
-    st.write(file_details)
-
     if st.session_state.processed_file != uploaded_file.name:
         st.session_state.processed_file = uploaded_file.name
         try:
+            # TODO：优化这部分的代码，利用上传的文档：方法：将二进制数据写入一个新的文档，再把新的文档传递进函数中
             bytes_data = uploaded_file.read()
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as temp_file:
-                temp_file.write(bytes_data)
-                temp_file_path = temp_file.name
 
-            title, extract_content = doc_processor.extract_text_table_img(temp_file_path)
-            os.unlink(temp_file_path)  # 删除临时文件
+            # TODO:多个人一起用 在临时目录中保存上传的文件
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_file:
+                tmp_file.write(bytes_data)
+                tmp_file_path = tmp_file.name
+            doc_processor = DocumentExtractor(tmp_file_path)
+            # 获取用户是否需要提取图片信息的选项
+            extract_image_option = st.radio("是否需要提取需求文档中的图片信息", ("是", "否"), index=1)
+            # extract_image = extract_image_option == "是"
+            # TODO：这里的反映时间
+            title, extract_content = doc_processor.extract_document(extract_image_option)
 
 
             async def run_extraction():
@@ -106,7 +111,7 @@ if uploaded_file is not None:
 
     df = st.session_state.initial_df
 
-    st.subheader("生成的需求信息表格（您可根据实际需要进行选择）:")
+    st.markdown("<div class='small-header'>生成的需求信息表格（您可根据实际需要进行选择）:</div>", unsafe_allow_html=True)
     edited_df = editor.paginated_data_editor(df, key_prefix='requirements')
 
     if not st.session_state.demand_edited_df.equals(edited_df):
