@@ -185,32 +185,23 @@ if st.button("生成测试用例"):
     if st.session_state.requirement_info and st.session_state.module:
         with st.spinner("正在生成测试用例..."):
             try:
-                input_hash = hash((str(st.session_state.requirement_info),
-                                   str(st.session_state.rag_info),
-                                   additional_notes,
-                                   str(st.session_state.module)))
-                if st.session_state.test_case_input_hash != input_hash:
-                    st.session_state.test_case_input_hash = input_hash
+                async def run_async():
+                    return await test_case_generator.qwen_generate_test_cases(
+                        st.session_state.requirement_info,
+                        st.session_state.rag_info,
+                        additional_notes,
+                        st.session_state.module
+                    )
 
+                result = asyncio.run(run_async())
+                result_df = data_formatter.formatting(result)
 
-                    async def run_async():
-                        return await test_case_generator.qwen_generate_test_cases(
-                            st.session_state.requirement_info,
-                            st.session_state.rag_info,
-                            additional_notes,
-                            st.session_state.module
-                        )
-
-
-                    result = asyncio.run(run_async())
-                    result_df = data_formatter.formatting(result)
-                    if result_df.empty:
-                        st.write("生成结果为空，请检查输入和API调用。")
-                    else:
-                        st.session_state.result_df = result_df
-                        st.write("测试用例已生成")
+                if result_df.empty:
+                    st.write("生成结果为空，请检查输入和API调用。")
                 else:
-                    st.write("使用缓存的测试用例结果")
+                    st.session_state.result_df = result_df
+                    st.write("测试用例已生成")
+
             except Exception as e:
                 st.error(f"生成测试用例时出错: {e}")
     else:
