@@ -1,3 +1,5 @@
+import urllib
+
 from sqlalchemy import create_engine, Column, String, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -23,7 +25,8 @@ class DemandInfo(Base):
                 f"parent='{self.parent}', start_index='{self.start_index}', end_index='{self.end_index}', "
                 f"content='{self.content}', number='{self.number}', parent_number='{self.parent_number}')>")
 
-DATABASE_URL = "mysql+pymysql://root:nwfn,xrfw.CJ@localhost:3306/atcg"
+password = urllib.parse.quote_plus("")
+DATABASE_URL = f"mysql+pymysql://root:{password}@10.12.3.29:3307/atcg"
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
