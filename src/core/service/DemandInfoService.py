@@ -35,8 +35,8 @@ class DemandInfoService:
         with get_db_session() as db:
             mapper = DemandInfoMapper(db)
             demand_info = mapper.get_demand_info_by_batch_id(batch_id)
-            for item in demand_info:
-                print(item)
+            # for item in demand_info:
+            #     print(item)
             return demand_info
 
 
