@@ -19,6 +19,7 @@ from core.xmind_download_link import DownloadLink
 from core.rag import Rag
 from core.fileExport import fileExport
 from core.paginatedDataEditor import PaginatedDataEditor
+from core.util.FileUtil import fileUtil
 
 # 页面布局配置
 st.set_page_config(layout='wide')
@@ -90,31 +91,38 @@ uploaded_file = st.file_uploader("选择需求文档", type=["docx"])
 if uploaded_file is not None:
     if st.session_state.processed_file != uploaded_file.name:
         st.session_state.processed_file = uploaded_file.name
-        # try:
-        # TODO：优化这部分的代码，利用上传的文档：方法：将二进制数据写入一个新的文档，再把新的文档传递进函数中
-        bytes_data = uploaded_file.read()
-        # TODO:多个人一起用 在临时目录中保存上传的文件
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_file:
-            tmp_file.write(bytes_data)
-            tmp_file_path = tmp_file.name
-        doc_processor = DocumentExtractor(tmp_file_path)
-        # 获取用户是否需要提取图片信息的选项
-        extract_image_option = st.radio("是否需要提取需求文档中的图片信息", ("是", "否"), index=1)
-        extract_image_flag = extract_image_option == "是"
-        title, extract_content = doc_processor.extract_document(extract_image_flag)
-        requirement_info = doc_processor.join_md_content(title, extract_content)
-        # async def run_extraction():
-        #     return await doc_processor.qwen_extract_requirements(title, extract_content)
-        # requirement_info = asyncio.run(run_extraction())
-        table_data = data_formatter.formatting(requirement_info)
-        st.session_state.initial_df = pd.DataFrame(table_data)
-        # except Exception as e:
-        #     st.error(f"上传文件时出现错误：{e}")
+        try:
+            # TODO：优化这部分的代码，利用上传的文档：方法：将二进制数据写入一个新的文档，再把新的文档传递进函数中
+            bytes_data = uploaded_file.read()
+            # TODO:多个人一起用 在临时目录中保存上传的文件
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_file:
+                tmp_file.write(bytes_data)
+                tmp_file_path = tmp_file.name
 
-        # finally:
-        #     # 删除临时文件
-        #     if tmp_file_path and os.path.exists(tmp_file_path):
-        #         os.remove(tmp_file_path)
+            # 保存文件
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            parent_dir = os.path.dirname(current_dir)  # 回退一层
+            full_upload_dir = os.path.join(parent_dir, 'file')
+            fileUtil.save_file(uploaded_file, full_upload_dir, '.docx')
+
+            doc_processor = DocumentExtractor(tmp_file_path)
+            # 获取用户是否需要提取图片信息的选项
+            extract_image_option = st.radio("是否需要提取需求文档中的图片信息", ("是", "否"), index=1)
+            extract_image_flag = extract_image_option == "是"
+            title, extract_content = doc_processor.extract_document(extract_image_flag)
+            requirement_info = doc_processor.join_md_content(title, extract_content)
+            # async def run_extraction():
+            #     return await doc_processor.qwen_extract_requirements(title, extract_content)
+            # requirement_info = asyncio.run(run_extraction())
+            table_data = data_formatter.formatting(requirement_info)
+            st.session_state.initial_df = pd.DataFrame(table_data)
+        except Exception as e:
+            st.error(f"上传文件时出现错误：{e}")
+
+        finally:
+            # 删除临时文件
+            if tmp_file_path and os.path.exists(tmp_file_path):
+                os.remove(tmp_file_path)
 
     df = st.session_state.initial_df
 
