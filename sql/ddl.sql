@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS atcg_demand_info (
     parent_number VARCHAR(64) COMMENT '父级标题序号'
 ) COMMENT '需求信息表';
 
-CREATE TABLE IF NOT EXISTS actg_history_record (
-    id VARCHAR(64) PRIMARY KEY COMMENT '全局唯一标识符',
+CREATE TABLE IF NOT EXISTS actg_record_batch (
+    id VARCHAR(64) PRIMARY KEY COMMENT '全局唯一标识符，对应atcg_demand_info表中的batch_id',
     file_name VARCHAR(256) COMMENT '需求文件名',
     file_hash_code VARCHAR(256) COMMENT '需求文件哈希码',
     upload_time TIMESTAMP COMMENT '开始上传时间',

@@ -225,25 +225,12 @@ class DocumentExtractor:
 
         # 读取表数据并构建出参title, extract_content
         demandInfoList = demandInfoService.select_by_batch_id(batch_id)
-        # 初始化过滤到后的需求信息
-        newDemandInfoList = []
-        # 得到父标题集合
-        parentNumbers = {demand.parent_number for demand in demandInfoList}
-        # 遍历需求功能点
-        for demand in demandInfoList:
-            # 如果是前三章直接跳过
-            if demand.number.startswith('1') or demand.number.startswith('2') or demand.number.startswith('3'):
-                continue
-            # 如果是别的需求标题的父标题也跳过
-            if demand.number in parentNumbers:
-                continue
-            # 保留的需求功能点就压入
-            newDemandInfoList.append(demand)
+
         # 初始化出参
         title = []
         extract_content = []
         # 遍历插入出参
-        for demandInfo in newDemandInfoList:
+        for demandInfo in demandInfoList:
             title.append(demandInfo.title)
             extract_content.append(demandInfo.content)
 
