@@ -6,7 +6,7 @@ class TestCaseGenerator:
         # self.client = RESTfulClient("http://10.12.3.31:9997")
         # self.model = self.client.get_model("Qwen2-72B-Instruct-GPTQ-Int4")
 
-    async def qwen_generate_test_cases(self, requirement_info, Recall_Content, complement, module):
+    async def qwen_generate_test_cases(self, requirement_info, Recall_Content, complement, module , Belongs_model , Version):
         # prompt = ''
         json1 = {
             "model": "Qwen/Qwen2-72B-Instruct",
@@ -24,6 +24,7 @@ class TestCaseGenerator:
                     "content": f'''我是一名网页端软件测试工程师，下面这份需求信息帮我输出一份测试点：
         需求信息：{requirement_info}
         RAG召回内容：{Recall_Content}
+        所属模块：{Belongs_model}
         输出要求：将测试点分为{module}，并且新增一列，表明所属的模块。若对应模块无合适的测试点，则无需生成该模块。
         输出格式：表格，分为序号、所属模块、需求名称、测试点，总共四列。''',
                     "role": "user"
@@ -64,6 +65,7 @@ class TestCaseGenerator:
                         {complement_text}需要包含所属模块、所属版本、相关需求、用例标题、前置条件、步骤、预期、关键词、优先级、用例类型、适用阶段、用例状态。共12列，注意步骤和预期两列分点阐述，如：1. 2. 等。注意运用等价类划分测试方法。
                         输出格式：表格。
                         输出限制：输出的表格中请勿包含序号列
+                        所属版本：{Version}
                         输出格式样例：
     | 所属模块           | 所属版本 | 相关需求 | 用例标题                       | 前置条件                     | 步骤                                                     | 预期                                                         | 关键词             | 优先级 | 用例类型 | 适用阶段 | 用例状态 |
 | :----------------- | :------- | :------- | :----------------------------- | :--------------------------- | :------------------------------------------------------- | :----------------------------------------------------------- | :----------------- | :----- | :------- | :------- | :------- |

@@ -19,6 +19,7 @@ from core.xmind_download_link import DownloadLink
 from core.rag import Rag
 from core.fileExport import fileExport
 from core.paginatedDataEditor import PaginatedDataEditor
+from core.PaginatedAgGrid import PaginatedAgGrid
 
 # 页面布局配置
 st.set_page_config(layout='wide')
@@ -50,6 +51,7 @@ download_link = DownloadLink()
 rag = Rag()
 export = fileExport()
 editor = PaginatedDataEditor(page_size=10)
+agGrid = PaginatedAgGrid(page_size=10)
 
 # 自定义CSS样式
 st.markdown(
@@ -88,6 +90,7 @@ st.title("🤖 根据需求文档生成测试用例")
 uploaded_file = st.file_uploader("选择需求文档", type=["docx"])
 
 if uploaded_file is not None:
+    # 当全局文件信息与当前文件信息不同则更新，默认为Null
     if st.session_state.processed_file != uploaded_file.name:
         st.session_state.processed_file = uploaded_file.name
         # try:
@@ -119,13 +122,15 @@ if uploaded_file is not None:
     df = st.session_state.initial_df
 
     st.markdown("<div class='small-header'>生成的需求信息表格（您可根据实际需要进行选择）:</div>", unsafe_allow_html=True)
-    edited_df = editor.paginated_data_editor(df, key_prefix='requirements')
+    # edited_df = editor.paginated_data_editor(df, key_prefix='requirements')
+    response, selected_rows, edited_df = agGrid.paginated_ag_grid(df, key_prefix='main')
 
+    # 当全局存储的需求信息表格与当前需求信息表格不同，则更新（默认为None）
     if not st.session_state.demand_edited_df.equals(edited_df):
         st.session_state.demand_edited_df = edited_df
 
-    if st.checkbox("显示完整数据"):
-        st.subheader("完整数据")
+    if st.checkbox("显示完整需求信息表格"):
+        st.subheader("完整需求信息表格")
         st.dataframe(
             st.session_state.demand_edited_df,
             use_container_width=True,
@@ -134,27 +139,28 @@ if uploaded_file is not None:
                            st.session_state.demand_edited_df.columns}
         )
 
-    selected_rows = st.multiselect("选择需求：", df.index,
-                                   format_func=lambda x: f"{st.session_state.demand_edited_df.at[x, '需求名称']}")
-    if st.session_state.selected_rows != selected_rows:
-        st.session_state.selected_rows = selected_rows
-        selected_rows_content = df.iloc[selected_rows]
-        st.write("选中的需求内容：")
-        st.dataframe(selected_rows_content)
-        selected_rows_dict = selected_rows_content.to_dict('records')
-        st.session_state.requirement_info = selected_rows_dict
-
-    if st.session_state.requirement_info != st.session_state.prev_requirement_info:
-        st.session_state.prev_requirement_info = st.session_state.requirement_info
+    # selected_rows = st.multiselect("选择需求：", df.index,
+    #                                format_func=lambda x: f"{st.session_state.demand_edited_df.at[x, '需求名称']}")
 
 
-        async def run_rag():
-            return await rag.rag_recall(st.session_state.requirement_info)
+    st.session_state.selected_rows = selected_rows
+    st.write("选中的需求内容：")
+    st.write(selected_rows)
+    st.session_state.requirement_info = selected_rows
+
+    # 当全局的需求信息与当前选中的需求信息不同，更新
+
+    st.session_state.prev_requirement_info = st.session_state.requirement_info
+
+    async def run_rag():
+        return await rag.rag_recall(st.session_state.requirement_info)
 
 
-        rag_info = asyncio.run(run_rag())
-        st.session_state.rag_info = rag_info
+    rag_info = asyncio.run(run_rag())
+    st.session_state.rag_info = rag_info
 
+Belongs_model = st.text_input("请输入测试的所属模块： ")
+Version = st.text_input("请输入测试的版本信息： ")
 additional_notes = st.text_input("请输入补充说明：（可选）")
 
 # 测试模块选择选项
@@ -186,7 +192,7 @@ if com_test:
 st.session_state.module = selected_tests
 
 if st.button("生成测试用例"):
-    if st.session_state.requirement_info and st.session_state.module:
+    if st.session_state.requirement_info is not None and st.session_state.module:
         with st.spinner("正在生成测试用例..."):
             try:
                 async def run_async():
@@ -194,7 +200,9 @@ if st.button("生成测试用例"):
                         st.session_state.requirement_info,
                         st.session_state.rag_info,
                         additional_notes,
-                        st.session_state.module
+                        st.session_state.module,
+                        Belongs_model,
+                        Version
                     )
 
 
@@ -228,7 +236,7 @@ if not st.session_state.result_df.empty:
                            st.session_state.result_edited_df.columns}
         )
 
-    # 文件导出部分
+    # 文件导出部分,构建一个下载链接，封装为一个按钮
     with tempfile.TemporaryDirectory() as save_dir:
         xmind_path = data_formatter.df_to_xmind(st.session_state.result_df, save_dir)
         freemind_path = data_formatter.df_to_freemind(st.session_state.result_df, save_dir)
