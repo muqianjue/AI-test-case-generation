@@ -1,17 +1,24 @@
 import asyncio
 import os
+import sys
+
+# 获取当前文件的目录
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# 添加 src 目录到 sys.path
+sys.path.append(current_dir)
+# 后续所有包之间的的依赖导入全部从core开始
+
 import tempfile
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-
-from data_formatter import DataFormatter
-from DocumentProcessor import DocumentExtractor
-from test_case_generator import TestCaseGenerator
-from xmind_download_link import DownloadLink
-from rag import Rag
-from fileExport import fileExport
-from paginatedDataEditor import PaginatedDataEditor
+from core.data_formatter import DataFormatter
+from core.DocumentProcessor import DocumentExtractor
+from core.test_case_generator import TestCaseGenerator
+from core.xmind_download_link import DownloadLink
+from core.rag import Rag
+from core.fileExport import fileExport
+from core.paginatedDataEditor import PaginatedDataEditor
 
 # 页面布局配置
 st.set_page_config(layout='wide')
@@ -83,36 +90,31 @@ uploaded_file = st.file_uploader("选择需求文档", type=["docx"])
 if uploaded_file is not None:
     if st.session_state.processed_file != uploaded_file.name:
         st.session_state.processed_file = uploaded_file.name
-        try:
-            # TODO：优化这部分的代码，利用上传的文档：方法：将二进制数据写入一个新的文档，再把新的文档传递进函数中
-            bytes_data = uploaded_file.read()
+        # try:
+        # TODO：优化这部分的代码，利用上传的文档：方法：将二进制数据写入一个新的文档，再把新的文档传递进函数中
+        bytes_data = uploaded_file.read()
+        # TODO:多个人一起用 在临时目录中保存上传的文件
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_file:
+            tmp_file.write(bytes_data)
+            tmp_file_path = tmp_file.name
+        doc_processor = DocumentExtractor(tmp_file_path)
+        # 获取用户是否需要提取图片信息的选项
+        extract_image_option = st.radio("是否需要提取需求文档中的图片信息", ("是", "否"), index=1)
+        extract_image_flag = extract_image_option == "是"
+        title, extract_content = doc_processor.extract_document(extract_image_flag)
+        requirement_info = doc_processor.join_md_content(title, extract_content)
+        # async def run_extraction():
+        #     return await doc_processor.qwen_extract_requirements(title, extract_content)
+        # requirement_info = asyncio.run(run_extraction())
+        table_data = data_formatter.formatting(requirement_info)
+        st.session_state.initial_df = pd.DataFrame(table_data)
+        # except Exception as e:
+        #     st.error(f"上传文件时出现错误：{e}")
 
-            # TODO:多个人一起用 在临时目录中保存上传的文件
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_file:
-                tmp_file.write(bytes_data)
-                tmp_file_path = tmp_file.name
-            doc_processor = DocumentExtractor(tmp_file_path)
-            # 获取用户是否需要提取图片信息的选项
-            extract_image_option = st.radio("是否需要提取需求文档中的图片信息", ("是", "否"), index=1)
-            # extract_image = extract_image_option == "是"
-            # TODO：这里的反映时间
-            title, extract_content = doc_processor.extract_document(extract_image_option)
-
-
-            async def run_extraction():
-                return await doc_processor.qwen_extract_requirements(title, extract_content)
-
-
-            requirement_info = asyncio.run(run_extraction())
-            table_data = data_formatter.formatting(requirement_info)
-            st.session_state.initial_df = pd.DataFrame(table_data)
-        except Exception as e:
-            st.error(f"上传文件时出现错误：{e}")
-
-        finally:
-        # 删除临时文件
-            if tmp_file_path and os.path.exists(tmp_file_path):
-                os.remove(tmp_file_path)
+        # finally:
+        #     # 删除临时文件
+        #     if tmp_file_path and os.path.exists(tmp_file_path):
+        #         os.remove(tmp_file_path)
 
     df = st.session_state.initial_df
 
@@ -145,8 +147,10 @@ if uploaded_file is not None:
     if st.session_state.requirement_info != st.session_state.prev_requirement_info:
         st.session_state.prev_requirement_info = st.session_state.requirement_info
 
+
         async def run_rag():
             return await rag.rag_recall(st.session_state.requirement_info)
+
 
         rag_info = asyncio.run(run_rag())
         st.session_state.rag_info = rag_info
@@ -193,6 +197,7 @@ if st.button("生成测试用例"):
                         st.session_state.module
                     )
 
+
                 result = asyncio.run(run_async())
                 result_df = data_formatter.formatting(result)
 
@@ -231,7 +236,7 @@ if not st.session_state.result_df.empty:
 
         for file_path, file_type in [(xmind_path, 'XMind'), (freemind_path, 'FreeMind'), (markdown_path, 'Markdown')]:
             file_base64 = download_link.get_file_base64(file_path)
-            html_content = export.file_export(file_base64, file_path , file_type)
+            html_content = export.file_export(file_base64, file_path, file_type)
             components.html(html_content, height=50)
 
 st.markdown("</div>", unsafe_allow_html=True)
