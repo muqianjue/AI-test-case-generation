@@ -225,6 +225,7 @@ class DocumentExtractor:
 
         # 读取表数据并构建出参title, extract_content
         demandInfoList = demandInfoService.select_by_batch_id(batch_id)
+
         # 初始化出参
         title = []
         extract_content = []
